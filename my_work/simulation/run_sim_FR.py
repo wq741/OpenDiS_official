@@ -7,7 +7,7 @@ Cu 多源 Frank-Read 位错动力学模拟
     材料        : Cu (b=2.55e-10 m, mu=48 GPa, nu=0.324)
     位错类型    : Frank-Read 源（两端固定 + 中间自由节点）
     初始密度    : 1e12 m^-2
-    源长度      : 0.5~2 μm，对数均匀分布
+    源长度      : 0.1~0.5 μm，对数均匀分布
     滑移系      : FCC 全部 12 个 {111}<110>
     加载方向    : [001]，常应变率 1000/s
     目标应变    : 1%
@@ -26,8 +26,7 @@ import pyexadis
 from framework.disnet_manager import DisNetManager
 from pyexadis_base import ExaDisNet, NodeConstraints
 from pyexadis_base import CalForce, MobilityLaw, TimeIntegration
-from pyexadis_base import Collision, Topology, Remesh, VisualizeNetwork, SimulateNetwork
-
+from pyexadis_base import Collision, Topology, Remesh, SimulateNetworkPerf
 
 # ════════════════════════════════════════════════════════════════════════
 # 材料和模拟参数
@@ -46,8 +45,8 @@ target_strain = 0.01 # 目标应变 1%
 
 # ── FR 源参数 ─────────────────────────────────────────────────────────
 rho_target  = 1e12   # 初始位错密度 (m^-2)
-L_min_phys  = 0.5e-6 # 源最小长度 (m)
-L_max_phys  = 2.0e-6 # 源最大长度 (m)
+L_min_phys  = 0.1e-6 # 源最小长度 (m)
+L_max_phys  = 0.5e-6 # 源最大长度 (m)
 L_min = L_min_phys / b_mag
 L_max = L_max_phys / b_mag
 
@@ -211,6 +210,7 @@ def main(plot=True):
 
     # ── 模拟参数 ──────────────────────────────────────────────────────
     state = {
+        "crystal"  : 'fcc',
         "burgmag" : b_mag,
         "mu"      : mu,
         "nu"      : nu,
@@ -254,20 +254,16 @@ def main(plot=True):
     # Remesh: LengthBased — 控制线段长度在 minseg~maxseg 之间
     remesh    = Remesh(remesh_rule='LengthBased', state=state)
 
-    vis = VisualizeNetwork() if plot else None
 
-    sim = SimulateNetwork(
+    sim = SimulateNetworkPerf(
         calforce=calforce, mobility=mobility, timeint=timeint,
-        collision=collision, topology=topology, remesh=remesh, vis=vis,
-        state=state,
+        collision=collision, topology=topology, remesh=remesh, state=state,
         loading_mode = 'strain_rate',
         erate        = strain_rate,
         edir         = np.array([0., 0., 1.]),
         max_strain   = target_strain,
         burgmag      = b_mag,
         print_freq   = 100,
-        plot_freq    = 1000,
-        plot_pause_seconds = 0.01,
         write_freq   = 50,
         write_dir    = 'output',
     )
