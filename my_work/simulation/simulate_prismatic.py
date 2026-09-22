@@ -28,9 +28,12 @@ try:
     import pyexadis
     from framework.disnet_manager import DisNetManager
     from pyexadis_base import (ExaDisNet, NodeConstraints,
-                                SimulateNetworkPerf,
-                                CalForce, MobilityLaw, TimeIntegration,
-                                Collision, Topology, Remesh)
+                            CalForce, MobilityLaw, TimeIntegration,
+                            Collision, Topology, Remesh)
+
+    sys.path.append(os.path.join(os.path.dirname(__file__), '../displacement'))
+    from ae_recorder import AEDisplacementRecorder
+    from simulate_with_ae import SimulateNetworkWithAE
     from pyexadis_utils import insert_prismatic_loop, dislocation_density
 except ImportError:
     raise ImportError('Cannot import pyexadis. Check pyexadis_path.')
@@ -62,8 +65,8 @@ def simulate_cu_fcc_prismatic():
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(os.path.join(script_dir, 'output'), exist_ok=True)
 
-    # ── Simulation box: 10 × 10 × 10 μm ────────────────────────────────────
-    L_m  = 10.0e-6                   # box edge [m]
+    # ── Simulation box: 5 × 5 × 5 μm ────────────────────────────────────
+    L_m  = 5.0e-6                   # box edge [m]
     Lbox = L_m / b_mag               # box edge [burgmag] ≈ 39215.7
     cell = pyexadis.Cell(h=Lbox * np.eye(3), is_periodic=[True, True, True])
     orig = np.array(cell.origin)     # lower-left corner in burgmag
@@ -87,7 +90,7 @@ def simulate_cu_fcc_prismatic():
     Nc = max(1, round(frac_c * L_total_m / (4.0 * R_c * b_mag)))
 
     print('=' * 60)
-    print('Cu FCC prismatic-loop simulation (10 μm box)')
+    print('Cu FCC prismatic-loop simulation (5 μm box)')
     print('=' * 60)
     print(f'  Lbox        = {Lbox:.1f} burgmag  ({L_m*1e6:.1f} μm)')
     print(f'  Primary  R  = {R_p:.1f} burgmag  ({4.0:.1f} μm side)  ×{Np}/system')
@@ -190,24 +193,34 @@ def simulate_cu_fcc_prismatic():
 
     # ── Run ─────────────────────────────────────────────────────────────────
     # erate = 50 /s for verification; change to 1000 /s for production
-    sim = SimulateNetworkPerf(
+    # ── AE displacement recorder ──────────────────────────────────────────
+    # 场点坐标先用一个占位的简单配置，之后你可以按需要改成实际想要的探测点
+    field_points = np.array([
+        orig + 0.5 * Lbox,                  # 盒子真正的中心
+    ])
+    ae_recorder = AEDisplacementRecorder(
+        field_points=field_points,
+        core_a=state["a"],       # 复用 state 里已经定义好的非奇异核心宽度
+        nu=state["nu"],          # 复用已经定义好的泊松比
+        output_file=os.path.join(output_dir, 'ae_displacement.dat')
+    )
+    sim = SimulateNetworkWithAE(
         calforce=calforce, mobility=mobility, timeint=timeint,
         collision=collision, topology=topology, remesh=remesh,
         cross_slip=None, vis=vis,
         loading_mode='strain_rate',
-        erate=50.0,                          # [/s] → set 1000.0 for production
-        edir=np.array([0., 0., 1.]),         # [001] uniaxial loading
-        max_strain=0.01,                     # stop at 1 % strain
+        erate=50.0,
+        edir=np.array([0., 0., 1.]),
+        max_strain=0.0001,          # ← 先改小，只为验证能不能跑通，不追求真实结果
         burgmag=b_mag,
         state=state,
-        print_freq=100,
-        plot_freq=1000,
-        plot_pause_seconds=0.0001,
+        print_freq=10,               # ← 打印频率也调密一点，方便你盯着看
+        plot_freq=None,
         write_freq=10,
         write_dir=output_dir,
+        ae_recorder=ae_recorder,     # ← 新增，把记录器传进去
         restart=None)
-
-    print(f'\nStarting simulation (erate=50/s, max_strain=1%)')
+    print(f'\nStarting simulation (erate=50/s, max_strain=0.01%)')
     print(f'Output → {output_dir}')
     print('=' * 60)
 
